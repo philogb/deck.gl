@@ -27,7 +27,10 @@ export const MAPBOX_LIMITS = {
   minZoom: 0,
   maxZoom: 20,
   minPitch: 0,
-  maxPitch: 60
+  maxPitch: 60,
+  // defined by mapbox-gl
+  maxLatitude: 85.05113,
+  minLatitude: -85.05113
 };
 
 // EVENT HANDLING PARAMETERS
@@ -41,11 +44,11 @@ const PITCH_ACCEL = 1.2;
 // @param {[Number, Number], optional} startPos - where the pointer grabbed at
 //   the start of the operation. Must be supplied of `panStart()` was not called
 function pan(viewState, {pos, startPos, startViewState}) {
-  const startViewport = new WebMercatorViewport(startViewState);
+  const startViewport = new WebMercatorViewport(startViewState.props);
   const startPanLngLat = startViewport.unproject(startPos);
 
   // take the start lnglat and put it where the mouse is down.
-  const viewport = new WebMercatorViewport(viewState);
+  const viewport = new WebMercatorViewport(viewState.props);
   const [longitude, latitude] = viewport.getLocationAtPoint({lngLat: startPanLngLat, pos});
 
   return viewState.getUpdatedState({
@@ -63,8 +66,8 @@ function rotate(viewState, {deltaScaleX, deltaScaleY, startViewState}) {
   assert(deltaScaleX >= -1 && deltaScaleX <= 1, 'deltaScaleX must be a number in [-1, 1]');
   assert(deltaScaleY >= -1 && deltaScaleY <= 1, 'deltaScaleY must be a number in [-1, 1]');
 
-  const startBearing = startViewState.bearing;
-  const startPitch = startViewState.pitch;
+  const startBearing = startViewState.props.bearing;
+  const startPitch = startViewState.props.pitch;
   const minPitch = 0;
   const maxPitch = 60;
 
@@ -96,15 +99,15 @@ function zoomTo(viewState, {controller, pos, startPos, scale, startViewState}) {
     controller.unproject(startPos) ||
     controller.unproject(pos);
 
-  let {startZoom} = startViewState.zoom;
+  let startZoom = startViewState.props.zoom;
 
   if (!Number.isFinite(startZoom)) {
-    startZoom = viewState.zoom;
+    startZoom = viewState.props.zoom;
   }
 
   // take the start lnglat and put it where the mouse is down.
   const newZoom = startZoom + Math.log2(scale);
-  const zoomedViewport = new WebMercatorViewport(Object.assign({}, viewState, {
+  const zoomedViewport = new WebMercatorViewport(Object.assign({}, viewState.props, {
     zoom: newZoom
   }));
   const [longitude, latitude] =
@@ -119,37 +122,37 @@ function zoomTo(viewState, {controller, pos, startPos, scale, startViewState}) {
 
 function zoomIn(viewState) {
   return viewState.getUpdatedState({
-    zoom: viewState.getZoom() + 0.2
+    zoom: viewState.props.zoom + 0.2
   });
 }
 
 function zoomOut(viewState) {
   return viewState.getUpdatedState({
-    zoom: viewState.getZoom() - 0.2
+    zoom: viewState.props.zoom - 0.2
   });
 }
 
 function moveLeft(viewState) {
   return viewState.getUpdatedState({
-    bearing: viewState.getBearing() - 3
+    bearing: viewState.props.bearing - 3
   });
 }
 
 function moveRight(viewState) {
   return viewState.getUpdatedState({
-    bearing: viewState.getBearing() + 3
+    bearing: viewState.props.bearing + 3
   });
 }
 
 function moveForward(viewState) {
   return viewState.getUpdatedState({
-    pitch: viewState.getPitch() + 3
+    pitch: viewState.props.pitch + 3
   });
 }
 
 function moveBackward(viewState) {
   return viewState.getUpdatedState({
-    pitch: viewState.getPitch() - 3
+    pitch: viewState.props.pitch - 3
   });
 }
 
@@ -180,6 +183,90 @@ export default class MapController extends Controller {
   }
 
   // Override selected event-to-reducer mappings
+  getViewportProps(viewState) {
+    const {
+      width,
+      height,
+      longitude,
+      latitude,
+      zoom,
+      pitch = 0,
+      bearing = 0,
+      altitude = 1.5,
+
+      maxZoom,
+      minZoom,
+      maxPitch,
+      minPitch,
+      maxLatitude,
+      minLatitude
+    } = Object.assign({}, MAPBOX_LIMITS, viewState.props);
+
+    const props = {
+      width, height, longitude, latitude, zoom, pitch, bearing, altitude,
+      maxZoom,
+      minZoom,
+      maxPitch,
+      minPitch,
+      maxLatitude,
+      minLatitude
+    };
+
+    // Normalize degrees
+    if (longitude < -180 || longitude > 180) {
+      props.longitude = mod(longitude + 180, 360) - 180;
+    }
+    if (bearing < -180 || bearing > 180) {
+      props.bearing = mod(bearing + 180, 360) - 180;
+    }
+
+    // Ensure zoom is within specified range
+    props.zoom = zoom > maxZoom ? maxZoom : zoom;
+    props.zoom = zoom < minZoom ? minZoom : zoom;
+
+    // Ensure pitch is within specified range
+    props.pitch = pitch > maxPitch ? maxPitch : pitch;
+    props.pitch = pitch < minPitch ? minPitch : pitch;
+
+    // Constrain zoom and shift center at low zoom levels
+    let {latitudeRange: [topY, bottomY], viewport} = this._getLatitudeRange(props);
+    let shiftY = 0;
+
+    if (bottomY - topY < height) {
+      // Map height must not be smaller than viewport height
+      props.zoom += Math.log2(height / (bottomY - topY));
+      const newRange = this._getLatitudeRange(props);
+      [topY, bottomY] = newRange.latitudeRange;
+      viewport = newRange.viewport;
+    }
+    if (topY > 0) {
+      // Compensate for white gap on top
+      shiftY = topY;
+    } else if (bottomY < height) {
+      // Compensate for white gap on bottom
+      shiftY = bottomY - height;
+    }
+    if (shiftY) {
+      props.latitude = viewport.unproject([props.width / 2, height / 2 + shiftY])[1];
+    }
+
+    return props;
+  }
+
+  // Returns {viewport, latitudeRange: [topY, bottomY]} in non-perspective mode
+  _getLatitudeRange(props) {
+    const flatViewport = new WebMercatorViewport(Object.assign({}, props, {
+      pitch: 0,
+      bearing: 0
+    }));
+    return {
+      viewport: flatViewport,
+      latitudeRange: [
+        flatViewport.project([props.longitude, props.maxLatitude])[1],
+        flatViewport.project([props.longitude, props.minLatitude])[1]
+      ]
+    };
+  }
 
   // Map specific handler for panning to rotate.
   // Called by `_onPan` when panning with function key pressed.

@@ -99,7 +99,7 @@ export default class ViewportController extends PureComponent {
       const ControllerClass = this.props.controller;
       // If props.controls is not provided, fallback to default MapControls instance
       // Cannot use defaultProps here because it needs to be per map instance
-      this._controller = new ControllerClass((this.props.viewState));
+      this._controller = new ControllerClass(this.props);
     } else {
       this._controller = this.props.controller;
     }

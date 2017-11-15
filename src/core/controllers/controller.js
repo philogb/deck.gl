@@ -20,6 +20,7 @@
 
 import ViewState from '../lib/view-state';
 import WebMercatorViewport from '../viewports/web-mercator-viewport';
+import assert from 'assert';
 
 // EVENT HANDLING PARAMETERS
 const ZOOM_ACCEL = 0.01;
@@ -240,11 +241,15 @@ export default class Controller {
       }
       // Classic deck.gl callback
       if (this.onViewportChange) {
-        this.onViewportChange(newViewState.getViewportProps(), interactionState);
+        this.onViewportChange(this.getViewportProps(newViewState), interactionState);
       }
     } else {
       // log.log('no change');
     }
+  }
+
+  getViewportProps(viewState) {
+    assert(false, 'getViewportProps is not implemented');
   }
 
   // Event handlers

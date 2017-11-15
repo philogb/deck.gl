@@ -43,7 +43,7 @@ function pan(viewState, {startViewState, pos, startPos}) {
   const deltaX = pos[0] - startPos[0];
   const deltaY = pos[1] - startPos[1];
 
-  const viewport = new OrbitViewport(startViewState);
+  const viewport = new OrbitViewport(startViewState.props);
   const center = viewport.project(viewport.lookAt);
   const newLookAt = viewport.unproject([
     center[0] - deltaX,
@@ -61,7 +61,7 @@ function pan(viewState, {startViewState, pos, startPos}) {
  * @param {[Number, Number]} pos - position on screen where the pointer is
  */
 function rotate(viewState, {startViewState, deltaScaleX, deltaScaleY}) {
-  const {rotationX, rotationOrbit} = startViewState || {};
+  const {rotationX, rotationOrbit} = startViewState.props;
 
   return viewState.getUpdatedState({
     rotationX: clamp(rotationX - deltaScaleY * 180, -89.999, 89.999),
@@ -78,7 +78,7 @@ function rotate(viewState, {startViewState, deltaScaleX, deltaScaleY}) {
  *   relative scale.
  */
 function zoomTo(viewState, {startViewState, pos, startPos, scale, controller, width, height}) {
-  const {zoom} = viewState;
+  const {zoom} = viewState.props;
 
   const startZoomPos = startPos;
   const newZoom = zoom * scale;
@@ -90,8 +90,8 @@ function zoomTo(viewState, {startViewState, pos, startPos, scale, controller, wi
   const cx = startZoomPos[0] - width / 2;
   const cy = height / 2 - startZoomPos[1];
 
-  const viewport = new OrbitViewport(startViewState);
-  const center = viewport.project(viewState.lookAt);
+  const viewport = new OrbitViewport(startViewState.props);
+  const center = viewport.project(viewState.props.lookAt);
   const newCenterX = center[0] - cx + cx * newZoom / zoom + deltaX;
   const newCenterY = center[1] + cy - cy * newZoom / zoom - deltaY;
 
@@ -126,5 +126,27 @@ export default class OrbitController extends Controller {
   constructor(options) {
     // Register map specific "ViewState + event -> ViewState" reducers
     super(Object.assign({}, options, {reducers: EVENT_REDUCERS}));
+  }
+
+  getViewportProps(viewState) {
+    const {
+      width,
+      height,
+      distance,
+      rotationX = 0,
+      rotationOrbit = 0,
+      orbitAxis = 'Z',
+      lookAt = [0, 0, 0],
+      up = [0, 1, 0],
+      fov = 75,
+      near = 1,
+      far = 100,
+      zoom = 1
+    } = viewState.props;
+
+    return {
+      width, height, distance, rotationX, rotationOrbit, orbitAxis,
+      lookAt, up, fov, near, far, zoom
+    };
   }
 }
