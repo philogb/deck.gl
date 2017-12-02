@@ -1,18 +1,19 @@
 /* global window, document */
 
-import {
-  // COORDINATE_SYSTEM,
-  WebMercatorViewport,
-  experimental
-} from 'deck.gl';
-
  // deck.gl react components
 import DeckGL, {ViewportController} from 'deck.gl';
 
+// deck.gl ES6 components
+import {
+  COORDINATE_SYSTEM,
+  WebMercatorViewport,
+  experimental
+} from 'deck.gl';
 const {
-  FirstPersonViewport,
   MapState,
-  // FirstPersonState,
+  OrbitState,
+  FirstPersonViewport,
+  OrbitViewport,
   ReflectionEffect
 } = experimental;
 
@@ -32,6 +33,7 @@ import LayerControls from './components/layer-controls';
 import LAYER_CATEGORIES from './examples';
 import {setImmutableDataSamples} from './immutable-data-samples';
 
+// TODO - isn't the autodetection of mapbox token handled by react-map-gl now?
 /* eslint-disable no-process-env */
 const MapboxAccessToken = process.env.MapboxAccessToken || // eslint-disable-line
   'Set MapboxAccessToken environment variable or put your token here.';
@@ -68,22 +70,30 @@ class App extends PureComponent {
         pitch: 0,
         bearing: 0
       },
+      orbitViewState: {
+        lookAt: [0, 0, 0],
+        distance: 3,
+        rotationX: -30,
+        rotationOrbit: 30,
+        orbitAxis: 'Y',
+        fov: 50,
+        minDistance: 1,
+        maxDistance: 20
+      },
       activeExamples: {
         ScatterplotLayer: true
       },
       settings: {
+        infovis: false,
         multiview: false,
         useDevicePixels: true,
         pickingRadius: 0,
         drawPickingColors: false,
 
-        separation: 0
-        // the rotation controls works only for layers in
-        // meter offset projection mode. They are commented out
-        // here since layer browser currently only have one layer
-        // in this mode, and that layer's data is rotation symmetrical
-        // rotationZ: 0,
-        // rotationX: 0
+        // Model matrix manipulation
+        separation: 0,
+        rotationZ: 0,
+        rotationX: 0
 
         // immutable: false,
         // Effects are experimental for now. Will be enabled in the future
@@ -197,38 +207,46 @@ class App extends PureComponent {
   /* eslint-enable max-depth */
 
   _getModelMatrix(index, coordinateSystem) {
-    // the rotation controls works only for layers in
-    // meter offset projection mode. They are commented out
-    // here since layer browser currently only have one layer
-    // in this mode.
     const {settings: {separation}} = this.state;
     const modelMatrix = new Matrix4().translate([0, 0, 1000 * index * separation]);
 
-    // if (coordinateSystem === COORDINATE_SYSTEM.METER_OFFSETS) {
-    //   const {settings: {rotationZ, rotationX}} = this.state;
-    //   modelMatrix.rotateZ(index * rotationZ * Math.PI);
-    //   modelMatrix.rotateX(index * rotationX * Math.PI);
-    // }
+    switch (coordinateSystem) {
+    case COORDINATE_SYSTEM.METER_OFFSETS:
+    case COORDINATE_SYSTEM.IDENTITY:
+      const {settings: {rotationZ, rotationX}} = this.state;
+      modelMatrix.rotateZ(index * rotationZ * Math.PI);
+      modelMatrix.rotateX(index * rotationX * Math.PI);
+      break;
+    default:
+      // Rotations don't work well for layers in lng lat coordinates
+      // since the origin is far away.
+      // We could rotate around current view point...
+    }
 
     return modelMatrix;
   }
 
-  _renderNoTokenWarning() {
-    /* eslint-disable max-len */
-    return (
-      <div id="no-token-warning">
-        <h3>No Mapbox access token found.</h3>
-        Read <a href="http://uber.github.io/deck.gl/#/documentation/overview/getting-started#note-on-map-tokens-">"Note on Map Tokens"</a> for information on setting up your basemap.
-      </div>
-    );
-    /* eslint-disable max-len */
-  }
-
   _getViewports() {
-    const {width, height, mapViewState, settings: {multiview}} = this.state;
+    const {
+      width, height, mapViewState, orbitViewState,
+      settings: {infovis, multiview}
+    } = this.state;
+
+    if (infovis) {
+      return [
+        new OrbitViewport({
+          id: 'infovis',
+          ...orbitViewState,
+          width,
+          height
+        })
+      ];
+    }
+
     return [
       new WebMercatorViewport({
-        id: 'basemap', ...mapViewState,
+        id: 'basemap',
+        ...mapViewState,
         width,
         height: multiview ? height / 2 : height,
         y: multiview ? height / 2 : 0
@@ -244,16 +262,16 @@ class App extends PureComponent {
   }
 
   _renderMap() {
-    const {width, height, mapViewState, settings} = this.state;
-    const {effects, pickingRadius, drawPickingColors, useDevicePixels} = settings;
+    const {width, height, orbitViewState, mapViewState, settings} = this.state;
+    const {infovis, effects, pickingRadius, drawPickingColors, useDevicePixels} = settings;
 
     const viewports = this._getViewports();
 
     return (
       <div style={{backgroundColor: '#eeeeee'}}>
         <ViewportController
-          viewportState={MapState}
-          {...mapViewState}
+          viewportState={infovis ? OrbitState : MapState}
+          {...(infovis ? orbitViewState : mapViewState)}
           width={width}
           height={height}
           onViewportChange={this._onViewportChange} >
@@ -266,14 +284,12 @@ class App extends PureComponent {
             viewports={viewports}
             layers={this._renderExamples()}
             effects={effects ? this._effects : []}
-            useDefaultGLSettings
             pickingRadius={pickingRadius}
             onLayerHover={this._onHover}
             onLayerClick={this._onClick}
+
             initWebGLParameters
-
             useDevicePixels={useDevicePixels}
-
             debug={false}
             drawPickingColors={drawPickingColors}
           >
@@ -297,6 +313,12 @@ class App extends PureComponent {
               </ViewportLabel>
             )}
 
+            { infovis && (
+              <ViewportLabel viewportId="infovis">
+                Map View
+              </ViewportLabel>
+            )}
+
           </DeckGL>
 
         </ViewportController>
@@ -310,7 +332,6 @@ class App extends PureComponent {
     return (
       <div>
         {this._renderMap()}
-        {!MapboxAccessToken && this._renderNoTokenWarning()}
         <div id="control-panel">
           <div style={{textAlign: 'center', padding: '5px 0 5px'}}>
             <button onClick={this._onPickObjects}>
@@ -341,5 +362,4 @@ class App extends PureComponent {
 
 const container = document.createElement('div');
 document.body.appendChild(container);
-
 ReactDOM.render(<App />, container);
