@@ -19,6 +19,12 @@
 // THE SOFTWARE.
 /* eslint-disable max-len */
 
+// Intialize globals, check version
+import './lib/init';
+
+// Import shaderlib to make sure shader modules are initialized
+import './shaderlib';
+
 // Core Library
 export {COORDINATE_SYSTEM} from './lib/constants';
 export {default as LayerManager} from './lib/layer-manager';
@@ -28,18 +34,13 @@ export {default as CompositeLayer} from './lib/composite-layer';
 
 // Viewports
 export {default as Viewport} from './viewports/viewport';
-export {default as FirstPersonViewport} from './viewports/first-person-viewport';
 export {default as WebMercatorViewport} from './viewports/web-mercator-viewport';
 export {default as PerspectiveViewport} from './viewports/perspective-viewport';
 export {default as OrthographicViewport} from './viewports/orthographic-viewport';
 
 // Transitions
-export {TRANSITION_EVENTS} from './lib/transition-manager';
 export {default as LinearInterpolator} from './transitions/linear-interpolator';
 export {default as ViewportFlyToInterpolator} from './transitions/viewport-fly-to-interpolator';
-
-// Import shaderlib to make sure shader modules are initialized
-import './shaderlib';
 
 // DEPREPECATED EXPORTS
 import {default as FirstPersonState} from './controllers/first-person-state';
@@ -53,8 +54,9 @@ import {default as MapController} from './controllers/map-controls';
 // import {default as FirstPersonController} from './controllers/first-person-controller';
 // import {default as OrbitController} from './controllers/orbit-controller';
 
-import {default as OrbitViewport} from './viewports/orbit-viewport';
+import {default as FirstPersonViewport} from './viewports/first-person-viewport';
 import {default as ThirdPersonViewport} from './viewports/third-person-viewport';
+import {default as OrbitViewport} from './viewports/orbit-viewport';
 
 // Experimental Features (May change in minor version bumps, use at your own risk)
 // Experimental Pure JS (non-React) bindings
@@ -66,6 +68,7 @@ import {default as Effect} from './experimental/lib/effect';
 
 // INTERNAL EXPORTS
 
+import {TRANSITION_EVENTS} from './lib/transition-manager';
 import TransitionManager from './lib/transition-manager';
 import {extractViewportFrom} from './transitions/transition-utils';
 
@@ -97,13 +100,17 @@ export const experimental = {
   // FirstPersonController,
   // OrbitController,
 
-  OrbitViewport,
+  FirstPersonViewport,
   ThirdPersonViewport,
+  OrbitViewport,
 
   DeckGLJS,
   MapControllerJS,
+
   EffectManager,
   Effect,
+
+  TRANSITION_EVENTS,
 
   // For react module
   TransitionManager,

@@ -12,7 +12,6 @@ import DeckGL, {ViewportController} from 'deck.gl';
 const {
   FirstPersonViewport,
   MapState,
-  // FirstPersonState,
   ReflectionEffect
 } = experimental;
 

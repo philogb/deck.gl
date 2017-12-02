@@ -41,7 +41,6 @@ export {
   OrthographicViewport,
 
   // Transition bindings
-  TRANSITION_EVENTS,
   LinearInterpolator,
   ViewportFlyToInterpolator
 } from './core';
@@ -68,6 +67,8 @@ const {
   // Viewports
   OrbitViewport,
 
+  TRANSITION_EVENTS,
+
   DeckGLJS,
   MapControllerJS,
 
@@ -88,6 +89,8 @@ Object.assign(experimental, {
   OrbitController,
 
   OrbitViewport,
+
+  TRANSITION_EVENTS,
 
   // Pure JS (non-React) API
   DeckGLJS,
