@@ -35,7 +35,6 @@ export {
 
   // Viewports
   Viewport,
-  FirstPersonViewport,
   WebMercatorViewport,
   PerspectiveViewport,
   OrthographicViewport,
@@ -66,6 +65,7 @@ const {
   OrbitController,
 
   // Viewports
+  FirstPersonViewport,
   OrbitViewport,
 
   DeckGLJS,
@@ -87,6 +87,7 @@ Object.assign(experimental, {
   FirstPersonController,
   OrbitController,
 
+  FirstPersonViewport,
   OrbitViewport,
 
   // Pure JS (non-React) API

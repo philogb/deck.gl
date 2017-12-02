@@ -28,6 +28,14 @@ const EQUATION = (x, y) => Math.sin(x * x + y * y) * x / Math.PI;
 const PlotLayerInfovisExample = {
   layer: PlotLayer,
   props: {
+    coordinateSystem: COORDINATE_SYSTEM.IDENTITY,
+    uCount: 200,
+    vCount: 200,
+    drawAxes: true,
+    axesPadding: 0.25,
+    axesColor: [0, 0, 0, 128],
+    opacity: 1,
+
     getPosition: (u, v) => {
       const x = (u - 1 / 2) * Math.PI * 2;
       const y = (v - 1 / 2) * Math.PI * 2;
@@ -36,23 +44,16 @@ const PlotLayerInfovisExample = {
     getColor: (x, y, z) => [40, z * 128 + 128, 160],
     getXScale: getScale,
     getYScale: getScale,
-    getZScale: getScale,
-    uCount: 200,
-    vCount: 200,
-    drawAxes: true,
-    axesPadding: 0.25,
-    axesColor: [0, 0, 0, 128],
-    opacity: 1
-    // pickable: true,
-    // onHover: this.props.onHover,
+    getZScale: getScale
     // updateTriggers: {
     //   getPosition: EQUATION
     // }
   }
 };
 
-// METER MODE EXAMPLES
+/*
 
+TODO - make sure data shows up, maybe add a modelMatrix
 const PointCloudLayerInfovisExample = {
   layer: PointCloudLayer,
   getData: dataSamples.getPointCloud,
@@ -61,19 +62,21 @@ const PointCloudLayerInfovisExample = {
     outline: true,
     coordinateSystem: COORDINATE_SYSTEM.IDENTITY,
     coordinateOrigin: dataSamples.positionOrigin,
-    getPosition: d => d.position,
-    getNormal: d => d.normal,
-    getColor: d => d.color,
     opacity: 1,
     radiusPixels: 4,
     pickable: true,
-    lightSettings: LIGHT_SETTINGS
+    lightSettings: LIGHT_SETTINGS,
+
+    getPosition: d => d.position,
+    getNormal: d => d.normal,
+    getColor: d => d.color
   }
 };
+*/
 
 export default {
   'Infovis Layers': {
-    PlotLayerInfovisExample,
-    PointCloudLayerInfovisExample
+    PlotLayerInfovisExample
+    // PointCloudLayerInfovisExample
   }
 };

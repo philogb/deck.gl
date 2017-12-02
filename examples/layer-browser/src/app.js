@@ -261,6 +261,13 @@ class App extends PureComponent {
     ];
   }
 
+  // Only show infovis layers in infovis mode and vice versa
+  _layerFilter({layer}) {
+    const {settings} = this.state;
+    const isIdentity = layer.props.coordinateSystem === COORDINATE_SYSTEM.IDENTITY;
+    return settings.infovis ? isIdentity : !isIdentity;
+  }
+
   _renderMap() {
     const {width, height, orbitViewState, mapViewState, settings} = this.state;
     const {infovis, effects, pickingRadius, drawPickingColors, useDevicePixels} = settings;
@@ -283,6 +290,7 @@ class App extends PureComponent {
             height={height}
             viewports={viewports}
             layers={this._renderExamples()}
+            layerFilter={this._layerFilter}
             effects={effects ? this._effects : []}
             pickingRadius={pickingRadius}
             onLayerHover={this._onHover}
@@ -307,17 +315,13 @@ class App extends PureComponent {
               First Person View
             </ViewportLabel>
 
-            { viewports[1] && (
-              <ViewportLabel viewportId="basemap">
-                Map View
-              </ViewportLabel>
-            )}
+            <ViewportLabel viewportId="basemap">
+              Map View
+            </ViewportLabel>
 
-            { infovis && (
-              <ViewportLabel viewportId="infovis">
-                Map View
-              </ViewportLabel>
-            )}
+            <ViewportLabel viewportId="infovis">
+              Orbit View
+            </ViewportLabel>
 
           </DeckGL>
 

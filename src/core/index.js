@@ -28,7 +28,6 @@ export {default as CompositeLayer} from './lib/composite-layer';
 
 // Viewports
 export {default as Viewport} from './viewports/viewport';
-export {default as FirstPersonViewport} from './viewports/first-person-viewport';
 export {default as WebMercatorViewport} from './viewports/web-mercator-viewport';
 export {default as PerspectiveViewport} from './viewports/perspective-viewport';
 export {default as OrthographicViewport} from './viewports/orthographic-viewport';
@@ -53,8 +52,9 @@ import {default as MapController} from './controllers/map-controls';
 // import {default as FirstPersonController} from './controllers/first-person-controller';
 // import {default as OrbitController} from './controllers/orbit-controller';
 
-import {default as OrbitViewport} from './viewports/orbit-viewport';
+import {default as FirstPersonViewport} from './viewports/first-person-viewport';
 import {default as ThirdPersonViewport} from './viewports/third-person-viewport';
+import {default as OrbitViewport} from './viewports/orbit-viewport';
 
 // Experimental Features (May change in minor version bumps, use at your own risk)
 // Experimental Pure JS (non-React) bindings
@@ -97,8 +97,9 @@ export const experimental = {
   // FirstPersonController,
   // OrbitController,
 
-  OrbitViewport,
+  FirstPersonViewport,
   ThirdPersonViewport,
+  OrbitViewport,
 
   DeckGLJS,
   MapControllerJS,
