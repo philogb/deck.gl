@@ -1,19 +1,23 @@
-import {COORDINATE_SYSTEM, PointCloudLayer} from 'deck.gl';
+import {COORDINATE_SYSTEM} from 'deck.gl';
 import PlotLayer from '../../../plot/plot-layer';
-import dataSamples from '../immutable-data-samples';
+
+// TODO - add point cloud layer for COORDINATE_SYSTEM.IDENTITY
+
+// import {PointCloudLayer} from 'deck.gl';
+// import dataSamples from '../immutable-data-samples';
 // import {scaleLinear} from 'd3-scale';
 
-const LIGHT_SETTINGS = {
-  lightsPosition: [
-    -122.45, 37.66, 8000,
-    -122.0, 38.00, 8000
-  ],
-  ambientRatio: 0.3,
-  diffuseRatio: 0.6,
-  specularRatio: 0.4,
-  lightsStrength: [1, 0.0, 0.8, 0.0],
-  numberOfLights: 2
-};
+// const LIGHT_SETTINGS = {
+//   lightsPosition: [
+//     -122.45, 37.66, 8000,
+//     -122.0, 38.00, 8000
+//   ],
+//   ambientRatio: 0.3,
+//   diffuseRatio: 0.6,
+//   specularRatio: 0.4,
+//   lightsStrength: [1, 0.0, 0.8, 0.0],
+//   numberOfLights: 2
+// };
 
 function getScale({min, max}) {
   return x => (x - min) / (max - min);
@@ -76,7 +80,7 @@ const PointCloudLayerInfovisExample = {
 
 export default {
   'Infovis Layers': {
-    PlotLayerInfovisExample
+    'PlotLayer (No Navigation)': PlotLayerInfovisExample
     // PointCloudLayerInfovisExample
   }
 };

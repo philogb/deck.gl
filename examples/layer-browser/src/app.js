@@ -320,7 +320,7 @@ class App extends PureComponent {
             </ViewportLabel>
 
             <ViewportLabel viewportId="infovis">
-              Orbit View
+              Orbit View (PlotLayer only, No Navigation)
             </ViewportLabel>
 
           </DeckGL>
