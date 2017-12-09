@@ -84,7 +84,7 @@ export default class SolidPolygonLayer extends Layer {
   getShaders() {
     return enable64bitSupport(this.props) ?
       {vs: vs64, fs, modules: ['project64', 'lighting', 'picking']} :
-      {vs: vs, fs, modules: ['lighting', 'picking']}; // 'project' module added by default.
+      {vs, fs, modules: ['lighting', 'picking']}; // 'project' module added by default.
   }
 
   initializeState() {
@@ -115,10 +115,12 @@ export default class SolidPolygonLayer extends Layer {
       attributeManager.invalidateAll();
 
       if (props.fp64 && props.coordinateSystem === COORDINATE_SYSTEM.LNGLAT) {
+        /* eslint-disable max-len */
         attributeManager.add({
           positions64xyLow: {size: 2, isInstanced: true, accessor: 'fp64', update: this.calculatePositionsLow},
-          nextPositions64xyLow: {size: 2, isInstanced: true, accessor: 'fp64', update: this.calculateNextPositionsLow},
+          nextPositions64xyLow: {size: 2, isInstanced: true, accessor: 'fp64', update: this.calculateNextPositionsLow}
         });
+        /* eslint-enable max-len */
       } else {
         attributeManager.remove([
           'positions64xyLow',
@@ -160,7 +162,13 @@ export default class SolidPolygonLayer extends Layer {
         modelsChanged: true,
         models: this._getModels(this.context.gl)
       });
-      console.log(this.state.models);
+    }
+
+    if (props.extruded !== !oldProps.extruded) {
+      this.state.attributeManager.invalidate('extruded');
+    }
+    if (props.fp64 !== !oldProps.fp64) {
+      this.state.attributeManager.invalidate('fp64');
     }
   }
 
@@ -199,15 +207,9 @@ export default class SolidPolygonLayer extends Layer {
     if (shouldUpdatePositions) {
       this.state.polygonTesselator.updatePositions({
         fp64: props.fp64,
-        getHeight: props.extruded ?
-          polygonIndex => props.getElevation(props.data[polygonIndex]) : null
+        extruded: props.extruded,
+        getHeight: polygonIndex => props.getElevation(props.data[polygonIndex])
       });
-    }
-    if (props.extruded !== !oldProps.extruded) {
-      this.state.attributeManager.invalidate('extruded');
-    }
-    if (props.fp64 !== !oldProps.fp64) {
-      this.state.attributeManager.invalidate('fp64');
     }
   }
 

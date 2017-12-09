@@ -26,7 +26,7 @@
 import * as Polygon from './polygon';
 import earcut from 'earcut';
 import {experimental} from '../../core';
-const {fp64ify, get, count, flattenVertices, fillArray} = experimental;
+const {get, count, flattenVertices, fillArray} = experimental;
 
 // Maybe deck.gl or luma.gl needs to export this
 function getPickingColor(index) {
@@ -65,7 +65,7 @@ export class PolygonTesselator {
     };
   }
 
-  updatePositions({fp64, getHeight}) {
+  updatePositions({fp64, extruded, getHeight}) {
     const {attributes, polygons, pointCount} = this;
 
     attributes.positions = attributes.positions || new Float32Array(pointCount * 3);
@@ -73,11 +73,13 @@ export class PolygonTesselator {
 
     if (fp64) {
       // We only need x, y component
-      attributes.positions64xyLow = attributes.positions64xyLow || new Float32Array(pointCount * 2);
-      attributes.nextPositions64xyLow = attributes.nextPositions64xyLow || new Float32Array(pointCount * 2);
+      attributes.positions64xyLow = attributes.positions64xyLow ||
+        new Float32Array(pointCount * 2);
+      attributes.nextPositions64xyLow = attributes.nextPositions64xyLow ||
+        new Float32Array(pointCount * 2);
     }
 
-    updatePositions(attributes, {polygons, getHeight, fp64});
+    updatePositions(attributes, {polygons, getHeight, extruded, fp64});
   }
 
   indices() {
@@ -229,7 +231,7 @@ export function flattenVertices2(nestedArray, {result = [], dimensions = 3} = {}
 
 function updatePositions(
   {positions, positions64xyLow, nextPositions, nextPositions64xyLow},
-  {polygons, getHeight, fp64}
+  {polygons, getHeight, extruded, fp64}
 ) {
   // Flatten out all the vertices of all the sub subPolygons
   let i = 0;
@@ -239,7 +241,7 @@ function updatePositions(
   let startVertex = null;
 
   const popStartVertex = () => {
-    if (startVertex && getHeight) {
+    if (startVertex && extruded) {
       nextPositions[nextI++] = startVertex.x;
       nextPositions[nextI++] = startVertex.y;
       nextPositions[nextI++] = startVertex.z;
@@ -249,10 +251,10 @@ function updatePositions(
       }
     }
     startVertex = null;
-  }
+  };
 
   polygons.forEach((polygon, polygonIndex) => {
-    const height = getHeight ? getHeight(polygonIndex) : 0;
+    const height = extruded ? getHeight(polygonIndex) : 0;
     forEachVertex(polygon, (vertex, vertexIndex) => { // eslint-disable-line
       const x = get(vertex, 0);
       const y = get(vertex, 1);
@@ -269,7 +271,7 @@ function updatePositions(
         positions64xyLow[j++] = xLow;
         positions64xyLow[j++] = yLow;
       }
-      if (getHeight && vertexIndex > 0) {
+      if (extruded && vertexIndex > 0) {
         nextPositions[nextI++] = x;
         nextPositions[nextI++] = y;
         nextPositions[nextI++] = z;
