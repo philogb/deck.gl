@@ -31,21 +31,6 @@ import {
 import {testInitializeLayer} from 'deck.gl/test/test-utils';
 
 import SolidPolygonLayer from 'deck.gl/core-layers/solid-polygon-layer/solid-polygon-layer';
-import {PolygonTesselator} from 'deck.gl/core-layers/solid-polygon-layer/polygon-tesselator';
-import {PolygonTesselatorExtruded}
-  from 'deck.gl/core-layers/solid-polygon-layer/polygon-tesselator-extruded';
-
-const polygons = data.choropleths.features.map(f => f.geometry.coordinates);
-
-function testTesselator(tesselator) {
-  return {
-    indices: tesselator.indices(),
-    positions: tesselator.positions(),
-    normals: tesselator.normals(),
-    colors: tesselator.colors(),
-    pickingColors: tesselator.pickingColors()
-  };
-}
 
 // add tests
 export default function coreLayersBench(suite) {
@@ -115,20 +100,6 @@ export default function coreLayersBench(suite) {
     })
     .add('SolidPolygonLayer#construct', () => {
       return new PolygonLayer({data: data.choropleths.features});
-    })
-
-    .group('TESSELATOR')
-    .add('polygonTesselator#flat', () => {
-      const tesselator = new PolygonTesselator({polygons});
-      testTesselator(tesselator);
-    })
-    .add('polygonTesselator#extruded', () => {
-      const tesselator = new PolygonTesselatorExtruded({polygons});
-      testTesselator(tesselator);
-    })
-    .add('polygonTesselator#wireframe', () => {
-      const tesselator = new PolygonTesselatorExtruded({polygons, wireframe: true});
-      testTesselator(tesselator);
     })
 
     ;

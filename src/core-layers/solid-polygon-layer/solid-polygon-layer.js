@@ -25,7 +25,6 @@ import {compareProps} from '../../core/lib/props';
 
 // Polygon geometry generation is managed by the polygon tesselator
 import {PolygonTesselator} from './polygon-tesselator';
-import {PolygonTesselatorExtruded} from './polygon-tesselator-extruded';
 
 import vs from './solid-polygon-layer-vertex.glsl';
 import vs64 from './solid-polygon-layer-vertex-64.glsl';
@@ -59,17 +58,39 @@ const defaultProps = {
   }
 };
 
+// Side model attributes
+const SIDE_FILL_POSITIONS = new Float32Array([
+  // top left corner
+  0, 1,
+  // bottom left corner
+  0, 0,
+  // top right corner
+  1, 1,
+  // bottom right corner
+  1, 0
+]);
+const SIDE_WIRE_POSITIONS = new Float32Array([
+  // top right corner
+  1, 1,
+  // top left corner
+  0, 1,
+  // bottom left corner
+  0, 0,
+  // bottom right corner
+  1, 0
+]);
+
 export default class SolidPolygonLayer extends Layer {
   getShaders() {
     return enable64bitSupport(this.props) ?
       {vs: vs64, fs, modules: ['project64', 'lighting', 'picking']} :
-      {vs, fs, modules: ['lighting', 'picking']}; // 'project' module added by default.
+      {vs: vs, fs, modules: ['lighting', 'picking']}; // 'project' module added by default.
   }
 
   initializeState() {
     const {gl} = this.context;
     this.setState({
-      model: this._getModel(gl),
+      models: this._getModels(gl),
       numInstances: 0,
       IndexType: gl.getExtension('OES_element_index_uint') ? Uint32Array : Uint16Array
     });
@@ -79,10 +100,11 @@ export default class SolidPolygonLayer extends Layer {
     /* eslint-disable max-len */
     attributeManager.add({
       indices: {size: 1, isIndexed: true, update: this.calculateIndices, noAlloc},
-      positions: {size: 3, accessor: 'getElevation', update: this.calculatePositions, noAlloc},
-      normals: {size: 3, update: this.calculateNormals, noAlloc},
-      colors: {size: 4, type: GL.UNSIGNED_BYTE, accessor: 'getColor', update: this.calculateColors, noAlloc},
-      pickingColors: {size: 3, type: GL.UNSIGNED_BYTE, update: this.calculatePickingColors, noAlloc}
+      vertexPositions: {size: 2, update: this.calculateVertexPositions, noAlloc},
+      positions: {size: 3, isInstanced: true, accessor: ['getElevation', 'extruded', 'fp64'], update: this.calculatePositions, noAlloc},
+      nextPositions: {size: 3, isInstanced: true, accessor: ['getElevation', 'extruded', 'fp64'], update: this.calculateNextPositions, noAlloc},
+      colors: {size: 4, isInstanced: true, type: GL.UNSIGNED_BYTE, accessor: 'getColor', update: this.calculateColors, noAlloc},
+      pickingColors: {size: 3, isInstanced: true, type: GL.UNSIGNED_BYTE, update: this.calculatePickingColors, noAlloc}
     });
     /* eslint-enable max-len */
   }
@@ -94,11 +116,13 @@ export default class SolidPolygonLayer extends Layer {
 
       if (props.fp64 && props.coordinateSystem === COORDINATE_SYSTEM.LNGLAT) {
         attributeManager.add({
-          positions64xyLow: {size: 2, update: this.calculatePositionsLow}
+          positions64xyLow: {size: 2, isInstanced: true, accessor: 'fp64', update: this.calculatePositionsLow},
+          nextPositions64xyLow: {size: 2, isInstanced: true, accessor: 'fp64', update: this.calculateNextPositionsLow},
         });
       } else {
         attributeManager.remove([
-          'positions64xyLow'
+          'positions64xyLow',
+          'nextPositions64xyLow'
         ]);
       }
     }
@@ -108,29 +132,40 @@ export default class SolidPolygonLayer extends Layer {
     const {extruded, lightSettings, elevationScale} = this.props;
     const {viewport} = this.context;
 
-    this.state.model.render(Object.assign({}, uniforms, {
+    const renderUniforms = Object.assign({}, uniforms, {
       extruded: extruded ? 1.0 : 0.0,
       elevationScale,
       pixelsPerUnit: viewport.getDistanceScales().pixelsPerDegree
     },
-    lightSettings));
+    lightSettings);
+
+    this.state.models.forEach(model => {
+      model.render(renderUniforms);
+    });
   }
 
-  updateState({props, oldProps, changeFlags}) {
-    super.updateState({props, oldProps, changeFlags});
+  updateState(updateParams) {
+    super.updateState(updateParams);
 
-    const regenerateModel = this.updateGeometry({props, oldProps, changeFlags});
+    this.updateGeometry(updateParams);
+    const {props, oldProps} = updateParams;
 
-    if (regenerateModel) {
-      const {gl} = this.context;
-      this.setState({model: this._getModel(gl)});
+    const regenerateModels = props.fp64 !== oldProps.fp64 ||
+      props.extruded !== oldProps.extruded ||
+      props.wireframe !== oldProps.wireframe;
+
+    if (regenerateModels) {
+      this.setState({
+        // Set a flag to set attributes to new models
+        modelsChanged: true,
+        models: this._getModels(this.context.gl)
+      });
+      console.log(this.state.models);
     }
-    this.updateAttribute({props, oldProps, changeFlags});
   }
 
   updateGeometry({props, oldProps, changeFlags}) {
-    const geometryConfigChanged = props.extruded !== oldProps.extruded ||
-      props.wireframe !== oldProps.wireframe || props.fp64 !== oldProps.fp64 ||
+    const geometryConfigChanged = changeFlags.dataChanged ||
       (changeFlags.updateTriggersChanged && (
         changeFlags.updateTriggersChanged.all ||
         changeFlags.updateTriggersChanged.getPolygon));
@@ -143,56 +178,151 @@ export default class SolidPolygonLayer extends Layer {
         triggerName: 'getElevation'
       });
 
+    const shouldUpdatePositions = geometryConfigChanged ||
+      getElevationTriggered ||
+      props.extruded !== oldProps.extruded ||
+      props.fp64 !== oldProps.fp64;
+
     // When the geometry config  or the data is changed,
     // tessellator needs to be invoked
-    if (changeFlags.dataChanged || geometryConfigChanged || getElevationTriggered) {
-      const {getPolygon, extruded, wireframe, getElevation} = props;
-
+    if (geometryConfigChanged) {
       // TODO - avoid creating a temporary array here: let the tesselator iterate
-      const polygons = props.data.map(getPolygon);
+      const polygons = props.data.map(props.getPolygon);
 
       this.setState({
-        polygonTesselator: !extruded ?
-          new PolygonTesselator({polygons, fp64: this.props.fp64}) :
-          new PolygonTesselatorExtruded({polygons, wireframe,
-            getHeight: polygonIndex => getElevation(this.props.data[polygonIndex]),
-            fp64: this.props.fp64
-          })
+        polygonTesselator: new PolygonTesselator(polygons)
       });
 
       this.state.attributeManager.invalidateAll();
     }
 
-    return geometryConfigChanged;
+    if (shouldUpdatePositions) {
+      this.state.polygonTesselator.updatePositions({
+        fp64: props.fp64,
+        getHeight: props.extruded ?
+          polygonIndex => props.getElevation(props.data[polygonIndex]) : null
+      });
+    }
+    if (props.extruded !== !oldProps.extruded) {
+      this.state.attributeManager.invalidate('extruded');
+    }
+    if (props.fp64 !== !oldProps.fp64) {
+      this.state.attributeManager.invalidate('fp64');
+    }
   }
 
-  _getModel(gl) {
-    return new Model(gl, Object.assign({}, this.getShaders(), {
-      id: this.props.id,
-      geometry: new Geometry({
-        drawMode: this.props.wireframe ? GL.LINES : GL.TRIANGLES,
-        attributes: {}
-      }),
-      vertexCount: 0,
-      isIndexed: true,
-      shaderCache: this.context.shaderCache
-    }));
+  updateAttributes(props) {
+    const {attributeManager, modelsChanged} = this.state;
+
+    // Figure out data length
+    attributeManager.update({
+      data: props.data,
+      numInstances: 0,
+      props,
+      buffers: props,
+      context: this,
+      // Don't worry about non-attribute props
+      ignoreUnknownAttributes: true
+    });
+
+    if (modelsChanged) {
+      this._updateAttributes(attributeManager.attributes);
+      // clear the flag
+      this.setState({modelsChanged: false});
+    } else {
+      const changedAttributes = attributeManager.getChangedAttributes({clearChangedFlags: true});
+      this._updateAttributes(changedAttributes);
+    }
+  }
+
+  _updateAttributes(attributes) {
+    this.state.models.forEach(model => {
+      const {isInstanced} = model;
+
+      if (isInstanced) {
+        model.setInstanceCount(this.state.numInstances);
+      } else {
+        model.setVertexCount(this.state.numVertex);
+      }
+
+      const newAttributes = {};
+      for (const attributeName in attributes) {
+        const attribute = attributes[attributeName];
+        if (attribute.isInstanced || !isInstanced) {
+          newAttributes[attributeName] = {
+            isIndexed: attribute.isIndexed,
+            instanced: isInstanced,
+            size: attribute.size,
+            value: attribute.value
+          };
+        }
+      }
+      model.setAttributes(newAttributes);
+    });
+  }
+
+  _getModels(gl) {
+    const {id, extruded, wireframe} = this.props;
+
+    return [
+      !wireframe && new Model(gl, Object.assign({}, this.getShaders(), {
+        id: `${id}-top`,
+        geometry: new Geometry({
+          drawMode: GL.TRIANGLES,
+          attributes: {}
+        }),
+        uniforms: {
+          isSideVertex: 0
+        },
+        vertexCount: 0,
+        isIndexed: true,
+        shaderCache: this.context.shaderCache
+      })),
+
+      extruded && new Model(gl, Object.assign({}, this.getShaders(), {
+        id: `${id}-side`,
+        geometry: new Geometry({
+          drawMode: wireframe ? GL.LINE_STRIP : GL.TRIANGLE_STRIP,
+          vertexCount: 4,
+          attributes: {
+            vertexPositions: {size: 2, value: wireframe ? SIDE_WIRE_POSITIONS : SIDE_FILL_POSITIONS}
+          }
+        }),
+        uniforms: {
+          isSideVertex: 1
+        },
+        isInstanced: true,
+        shaderCache: this.context.shaderCache
+      }))
+    ].filter(Boolean);
+
   }
 
   calculateIndices(attribute) {
     attribute.value = this.state.polygonTesselator.indices();
     attribute.target = GL.ELEMENT_ARRAY_BUFFER;
-    this.state.model.setVertexCount(attribute.value.length / attribute.size);
+    const numVertex = attribute.value.length / attribute.size;
+    this.setState({numVertex});
+  }
+
+  calculateVertexPositions(attribute) {
+    attribute.value = this.state.polygonTesselator.vertexPositions();
+    const numInstances = attribute.value.length / attribute.size;
+    this.setState({numInstances});
   }
 
   calculatePositions(attribute) {
-    attribute.value = this.state.polygonTesselator.positions().positions;
+    attribute.value = this.state.polygonTesselator.positions();
   }
   calculatePositionsLow(attribute) {
-    attribute.value = this.state.polygonTesselator.positions().positions64xyLow;
+    attribute.value = this.state.polygonTesselator.positions64xyLow();
   }
-  calculateNormals(attribute) {
-    attribute.value = this.state.polygonTesselator.normals();
+
+  calculateNextPositions(attribute) {
+    attribute.value = this.state.polygonTesselator.nextPositions();
+  }
+  calculateNextPositionsLow(attribute) {
+    attribute.value = this.state.polygonTesselator.nextPositions64xyLow();
   }
 
   calculateColors(attribute) {

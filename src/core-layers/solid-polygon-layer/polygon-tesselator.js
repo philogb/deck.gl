@@ -50,12 +50,34 @@ const DEFAULT_COLOR = [0, 0, 0, 255]; // Black
 // This class is set up to allow querying one attribute at a time
 // the way the AttributeManager expects it
 export class PolygonTesselator {
-  constructor({polygons, fp64 = false}) {
+  constructor(polygons) {
     // Normalize all polygons
-    this.polygons = polygons.map(polygon => Polygon.normalize(polygon));
+    polygons = polygons.map(polygon => Polygon.normalize(polygon));
+
     // Count all polygon vertices
-    this.pointCount = getPointCount(this.polygons);
-    this.fp64 = fp64;
+    const pointCount = getPointCount(polygons);
+
+    this.polygons = polygons;
+    this.pointCount = pointCount;
+
+    this.attributes = {
+      pickingColors: calculatePickingColors({polygons, pointCount})
+    };
+  }
+
+  updatePositions({fp64, getHeight}) {
+    const {attributes, polygons, pointCount} = this;
+
+    attributes.positions = attributes.positions || new Float32Array(pointCount * 3);
+    attributes.nextPositions = attributes.nextPositions || new Float32Array(pointCount * 3);
+
+    if (fp64) {
+      // We only need x, y component
+      attributes.positions64xyLow = attributes.positions64xyLow || new Float32Array(pointCount * 2);
+      attributes.nextPositions64xyLow = attributes.nextPositions64xyLow || new Float32Array(pointCount * 2);
+    }
+
+    updatePositions(attributes, {polygons, getHeight, fp64});
   }
 
   indices() {
@@ -63,24 +85,33 @@ export class PolygonTesselator {
     return calculateIndices({polygons, indexCount});
   }
 
-  positions() {
-    const {polygons, pointCount} = this;
-    return calculatePositions({polygons, pointCount, fp64: this.fp64});
+  vertexPositions() {
+    const {pointCount} = this;
+    return new Float32Array(pointCount * 2);
   }
 
-  normals() {
-    const {polygons, pointCount} = this;
-    return calculateNormals({polygons, pointCount});
+  positions() {
+    return this.attributes.positions;
+  }
+  positions64xyLow() {
+    return this.attributes.positions64xyLow;
+  }
+
+  nextPositions() {
+    return this.attributes.nextPositions;
+  }
+  nextPositions64xyLow() {
+    return this.attributes.nextPositions64xyLow;
   }
 
   colors({getColor = x => DEFAULT_COLOR} = {}) {
-    const {polygons, pointCount} = this;
-    return calculateColors({polygons, pointCount, getColor});
+    const {attributes, polygons, pointCount} = this;
+    attributes.colors = attributes.colors || new Uint8ClampedArray(pointCount * 4);
+    return updateColors(attributes, {polygons, getColor});
   }
 
   pickingColors() {
-    const {polygons, pointCount} = this;
-    return calculatePickingColors({polygons, pointCount});
+    return this.attributes.pickingColors;
   }
 
   // getAttribute({size, accessor}) {
@@ -196,43 +227,67 @@ export function flattenVertices2(nestedArray, {result = [], dimensions = 3} = {}
   return result;
 }
 
-function calculatePositions({polygons, pointCount, fp64}) {
+function updatePositions(
+  {positions, positions64xyLow, nextPositions, nextPositions64xyLow},
+  {polygons, getHeight, fp64}
+) {
   // Flatten out all the vertices of all the sub subPolygons
-  const attribute = new Float32Array(pointCount * 3);
-  let attributeLow;
-  if (fp64) {
-    // We only need x, y component
-    attributeLow = new Float32Array(pointCount * 2);
-  }
   let i = 0;
   let j = 0;
-  for (const polygon of polygons) {
-    Polygon.forEachVertex(polygon, vertex => { // eslint-disable-line
+  let nextI = 0;
+  let nextJ = 0;
+  let startVertex = null;
+
+  const popStartVertex = () => {
+    if (startVertex && getHeight) {
+      nextPositions[nextI++] = startVertex.x;
+      nextPositions[nextI++] = startVertex.y;
+      nextPositions[nextI++] = startVertex.z;
+      if (fp64) {
+        nextPositions64xyLow[nextJ++] = startVertex.xLow;
+        nextPositions64xyLow[nextJ++] = startVertex.yLow;
+      }
+    }
+    startVertex = null;
+  }
+
+  polygons.forEach((polygon, polygonIndex) => {
+    const height = getHeight ? getHeight(polygonIndex) : 0;
+    forEachVertex(polygon, (vertex, vertexIndex) => { // eslint-disable-line
       const x = get(vertex, 0);
       const y = get(vertex, 1);
-      const z = get(vertex, 2) || 0;
-      attribute[i++] = x;
-      attribute[i++] = y;
-      attribute[i++] = z;
+      const z = (get(vertex, 2) || 0) + height;
+      let xLow;
+      let yLow;
+
+      positions[i++] = x;
+      positions[i++] = y;
+      positions[i++] = z;
       if (fp64) {
-        attributeLow[j++] = fp64ify(x)[1];
-        attributeLow[j++] = fp64ify(y)[1];
+        xLow = x - Math.fround(x);
+        yLow = y - Math.fround(y);
+        positions64xyLow[j++] = xLow;
+        positions64xyLow[j++] = yLow;
+      }
+      if (getHeight && vertexIndex > 0) {
+        nextPositions[nextI++] = x;
+        nextPositions[nextI++] = y;
+        nextPositions[nextI++] = z;
+        if (fp64) {
+          nextPositions64xyLow[nextJ++] = xLow;
+          nextPositions64xyLow[nextJ++] = yLow;
+        }
+      }
+      if (vertexIndex === 0) {
+        popStartVertex();
+        startVertex = {x, y, z, xLow, yLow};
       }
     });
-  }
-  return {positions: attribute, positions64xyLow: attributeLow};
+  });
+  popStartVertex();
 }
 
-function calculateNormals({polygons, pointCount}) {
-  // TODO - use generic vertex attribute?
-  const attribute = new Float32Array(pointCount * 3);
-  // normals is not used in flat polygon shader
-  // fillArray({target: attribute, source: [0, 0, 1], start: 0, count: pointCount});
-  return attribute;
-}
-
-function calculateColors({polygons, pointCount, getColor}) {
-  const attribute = new Uint8ClampedArray(pointCount * 4);
+function updateColors({colors}, {polygons, getColor}) {
   let i = 0;
   polygons.forEach((complexPolygon, polygonIndex) => {
     // Calculate polygon color
@@ -240,10 +295,10 @@ function calculateColors({polygons, pointCount, getColor}) {
     color = parseColor(color);
 
     const vertexCount = Polygon.getVertexCount(complexPolygon);
-    fillArray({target: attribute, source: color, start: i, count: vertexCount});
+    fillArray({target: colors, source: color, start: i, count: vertexCount});
     i += color.length * vertexCount;
   });
-  return attribute;
+  return colors;
 }
 
 function calculatePickingColors({polygons, pointCount}) {
@@ -256,4 +311,15 @@ function calculatePickingColors({polygons, pointCount}) {
     i += color.length * vertexCount;
   });
   return attribute;
+}
+
+function forEachVertex(polygon, visitor) {
+  if (Polygon.isSimple(polygon)) {
+    polygon.forEach(visitor);
+    return;
+  }
+
+  polygon.forEach(simplePolygon => {
+    simplePolygon.forEach(visitor);
+  });
 }
